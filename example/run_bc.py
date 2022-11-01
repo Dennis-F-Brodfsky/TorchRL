@@ -12,7 +12,7 @@ env = gym.make(env_name)
 obs_dim = env.observation_space.shape[0]
 ac_dim = env.action_space.shape[0]
 mean_net = build_mlp(obs_dim, ac_dim, 2, 32)
-actor_optim_spec = OptimizerSpec(Adam, {'lr': 5e-3}, ConstantSchedule(5e-3))
+actor_optim_spec = OptimizerSpec(Adam, {'lr': 5e-3}, lambda t: 1)
 
 args = BCConfig(env_name='Ant-v2', exp_name='bc-ant', time_steps=1,
                 num_agent_train_steps_per_iter=1000, batch_size=1000,
@@ -23,7 +23,7 @@ set_config_logdir(args)
 params = vars(args)
 # Run behavior cloning
 mean_net = build_mlp(obs_dim, ac_dim, 2, 32)
-actor_optim_spec = OptimizerSpec(Adam, {'lr': 5e-3}, ConstantSchedule(5e-3))
+actor_optim_spec = OptimizerSpec(Adam, {'lr': 5e-3}, lambda t: 1)
 trainer = BCTrainer(params)
 trainer.run_training_loop(params['time_steps'], trainer.agent.actor, trainer.agent.actor,
                           initial_expert_data=params['expert_data'], relabel_with_expert=False,

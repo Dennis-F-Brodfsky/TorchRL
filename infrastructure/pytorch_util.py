@@ -69,3 +69,20 @@ def from_numpy(*args, **kwargs):
 
 def to_numpy(tensor):
     return tensor.to('cpu').detach().numpy()
+
+
+class Scalar(nn.Module):
+    def __init__(self, val=0, requires_grad=True):
+        super().__init__()
+        self.value = nn.Parameter(data=torch.Tensor([val]), requires_grad=requires_grad)
+
+    def forward(self):
+        return self.value
+
+
+def build_optim(optim_spec, param):
+    optimizer = optim_spec[0](param, **optim_spec[1])
+    lr_schedule = None
+    if optim_spec[2]:
+        lr_schedule = torch.optim.lr_scheduler.LambdaLR(optimizer, optim_spec[2])
+    return optimizer, lr_schedule

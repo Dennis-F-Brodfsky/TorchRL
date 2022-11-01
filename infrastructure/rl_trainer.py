@@ -98,12 +98,14 @@ class RLTrainer:
     def perform_logging(self, itr, paths, eval_policy, train_video_paths, training_logs):
         self._video_log(itr, self.eval_env, eval_policy, train_video_paths)
         if self.log_condition:  # logging condition
+            print(f"\n\n---------------iter {itr} -------------------:")
             logs = OrderedDict()
             logs = self._train_log(logs, paths)
             logs = self._eval_log(logs, self.eval_env, eval_policy)
             logs["TimeSinceStart"] = time.time() - self.start_time
             logs.update(training_logs[-1])
             for key, value in logs.items():
+                print(f"{key}: {value}")
                 self.logger.log_scalar(value, key, itr)
             self.logger.flush()
 
@@ -320,6 +322,19 @@ class ACTrainer(RLTrainer):
 class DDPGTrainer(RLTrainer):
     def __init__(self, params):
         params['agent_class'] = agents.DDPGAgent
+        super().__init__(params)
+
+    def _create_env(self, params) -> gym.Env:
+        env = gym.make(params['env_name'])
+        if params['gym_wrapper']:
+            env = params['gym_wrapper'](env)
+        env.seed(params['seed'])
+        return env
+
+
+class SACTrainer(RLTrainer):
+    def __init__(self, params):
+        params['agent_class'] = agents.SACAgent
         super().__init__(params)
 
     def _create_env(self, params) -> gym.Env:

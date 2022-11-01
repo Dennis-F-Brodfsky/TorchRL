@@ -30,31 +30,30 @@ class MLPPolicy(BasePolicy, nn.Module):
             self.logstd = nn.Parameter(torch.zeros(self.ac_dim, dtype=torch.float32, device=ptu.device))
             self.logstd.to(ptu.device)
             parameters = chain([self.logstd], self.mean_net.parameters())
-        self.optimizer = self.optimizer_spec[0](parameters, **self.optimizer_spec[1])
-        if self.optimizer_spec[2]:
-            self.lr_schedule = torch.optim.lr_scheduler.LambdaLR(self.optimizer, self.optimizer_spec[2])
+        self.optimizer, self.lr_schedule = ptu.build_optim(self.optimizer_spec, parameters)
         if nn_baseline:
             self.baseline.to(ptu.device)
             self.baseline_loss = nn.MSELoss()
-            self.baseline_optimizer = self.baseline_optim_spec[0](self.baseline.parameters(),
-                                                                  **self.baseline_optim_spec[1])
-            if self.baseline_optim_spec[2]:
-                self.baseline_lr_schedule = torch.optim.lr_scheduler.LambdaLR(self.baseline_optimizer,
-                                                                              self.baseline_optim_spec[2])
+            self.baseline_optimizer, self.baseline_lr_schedule = ptu.build_optim(self.baseline_optim_spec, self.baseline.parameters())
 
     def save(self, filepath: str):
         torch.save(self.state_dict(), filepath)
 
-    def forward(self, observation):
+    def forward(self, observation, return_log_prob=False):
         if self.discrete:
-            return distributions.Categorical(logits=self.logits_na(observation))
+            dist = distributions.Categorical(logits=self.logits_na(observation))
         else:
             batch_mean = self.mean_net(observation)
             scale_tril = torch.diag(torch.exp(self.logstd))
             batch_dim = batch_mean.shape[0]
             batch_scale_tril = scale_tril.repeat(batch_dim, 1, 1)
             action_distribution = distributions.MultivariateNormal(batch_mean, scale_tril=batch_scale_tril)
-            return action_distribution
+            dist = action_distribution
+        if return_log_prob:
+            action = dist.rsample()
+            return action, dist.log_prob(action)
+        else:
+            return dist
 
     def get_action(self, obs):
         self.eval()
@@ -133,6 +132,11 @@ class MLPPolicyAC(MLPPolicyPG):
             loss = - torch.min(ratio*adv_n, torch.clamp(ratio, 1-self.ppo_eps, 1+self.ppo_eps)*adv_n).mean()
         else:
             loss = - (log_prob*adv_n).mean()
+        if self.discrete:
+            nn.utils.clip_grad_norm_(self.logits_na.parameters(), self.clip_grad_norm)
+        else:
+            nn.utils.clip_grad_norm_(self.mean_net.parameters(), self.clip_grad_norm)
+            nn.utils.clip_grad_norm_(self.logstd, self.clip_grad_norm/10)
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
@@ -141,11 +145,40 @@ class MLPPolicyAC(MLPPolicyPG):
 
 
 class MLPPolicySAC(MLPPolicyAC):
-    pass
+    def __init__(self, ac_dim, mean_net, logits_na, clip_grad_norm,
+                 optimizer_spec, ppo_eps, log_alpha, alpha_optim_spec, target_entropy, discrete=False,
+                 use_entropy=True, **kwargs):
+        super().__init__(ac_dim, mean_net, logits_na, clip_grad_norm, optimizer_spec,
+                         ppo_eps, discrete, True)
+        self.use_entropy = use_entropy
+        if self.use_entropy:
+            self.target_entropy = target_entropy
+            self.log_alpha = log_alpha
+            self.alpha_optim_spec = alpha_optim_spec
+            self.alpha_optim, self.alpha_schedule = ptu.build_optim(self.alpha_optim_spec, self.log_alpha.parameters())
 
-
-class MLPPolicyA2C(MLPPolicyAC):
-    pass
+    def update(self, obs, action, adv_n=None, q_vals=None, old_log_prob: torch.Tensor = None):
+        self.train()
+        obs, action = ptu.from_numpy(obs), ptu.from_numpy(action)
+        new_action, log_prob = self(obs, True)
+        alpha_loss = -torch.exp(self.log_alpha())*(log_prob+self.target_entropy).detach().mean()
+        alpha = torch.exp(self.log_alpha()).detach()
+        actor_loss = (alpha*log_prob-adv_n)
+        self.optimizer.zero_grad()
+        actor_loss.backward()
+        if self.discrete:
+            nn.utils.clip_grad_norm_(self.logits_na.parameters(), self.clip_grad_norm)
+        else:
+            nn.utils.clip_grad_norm_(self.mean_net.parameters(), self.clip_grad_norm)
+            nn.utils.clip_grad_norm_(self.logstd, self.clip_grad_norm/10)
+        self.optimizer.step()
+        if self.optimizer_spec[2]:
+            self.lr_schedule.step()
+        self.alpha_optim.zero_grad()
+        alpha_loss.backward()
+        self.alpha_optim.step()
+        if self.alpha_optim_spec[2]:
+            self.alpha_schedule.step()
 
 
 class MLPPolicySL(MLPPolicy):

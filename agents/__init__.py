@@ -7,6 +7,7 @@ from agents.actor_critic_agent import ACAgent
 from agents.dqn_agent import DQNAgent
 from agents.mb_agent import MBAgent
 from agents.ddpg_agent import DDPGAgent
+from agents.sac_agent import SACAgent
 
 __all__ = [
     'DPAgent',
@@ -17,5 +18,6 @@ __all__ = [
     'ACAgent',
     'DQNAgent',
     'DDPGAgent',
-    'MBAgent'
+    'MBAgent',
+    'SACAgent'
 ]

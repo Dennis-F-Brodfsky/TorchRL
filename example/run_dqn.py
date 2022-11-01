@@ -129,7 +129,7 @@ def lander_optimizer():
         optim_kwargs=dict(
             lr=1,
         ),
-        learning_rate_schedule=lambda epoch: 1e-3,  # keep init learning rate
+        learning_rate_schedule=lambda epoch: 1e-4,  # keep init learning rate
     )
 
 
@@ -156,30 +156,28 @@ def run_game(env_name='LunarLander-v2'):
     dqn_trainer.run_training_loop(params['time_steps'], dqn_trainer.agent.actor, dqn_trainer.agent.actor)
 
 
-def create_duel_lander_q_network(network, ac_dim):
-    q_layer = nn.Linear(64, ac_dim)
-    return nn.Sequential(network, q_layer)
+class Duel_Vnet(nn.Module):
+    def __init__(self, ob_dim, ac_dim):
+        super(Duel_Vnet, self).__init__()
+        self.feature = nn.Sequential(nn.Linear(ob_dim, 64), nn.ReLU(), nn.Linear(64, 64), nn.ReLU())
+        self.v_layer = nn.Sequential(nn.Linear(64, 16), nn.ReLU(), nn.Linear(16, 1))
+        self.q_layer = nn.Linear(64, ac_dim)
 
-
-def create_duel_lander_v_network(network):
-    return nn.Sequential(network.
-                         nn.Sequential(nn.Linear(64, 16),
-                                       nn.ReLU(),
-                                       nn.Linear(16, 1)))
+    def forward(self, x):
+        f = self.feature(x)
+        v = self.v_layer(f)
+        q = self.q_layer(f)
+        return v + q - q.mean(dim=-1, keepdim=True)
 
 
 def run_duel(env_name='LunarLander-v2'):
     tmp_env = gym.make(env_name)
     ob_dim = tmp_env.observation_space.shape[0]
     ac_dim = tmp_env.action_space.n
-    feature_layer = nn.Sequential(nn.Linear(ob_dim, 64), nn.ReLU(), nn.Linear(64, 64), nn.ReLU())
-    create_q_net = partial(create_duel_lander_q_network, feature_layer, ac_dim)
-    create_v_net = partial(create_duel_lander_v_network, feature_layer)
+    create_q_net = lambda: Duel_Vnet(ob_dim, ac_dim)
     env_args = get_env_kwargs(env_name)
     env_args['q_func'] = create_q_net
-    env_args['v_func'] = create_v_net
-    env_args['v_func_spec'] = lander_optimizer()
-    args = DQNConfig(env_name, 1, double_q=True, dueling=True)
+    args = DQNConfig(env_name, 1, double_q=False)
     set_config_logdir(args)
     params = vars(args)
     params.update(env_args)
@@ -187,6 +185,30 @@ def run_duel(env_name='LunarLander-v2'):
     trainer.run_training_loop(params['time_steps'], trainer.agent.actor, trainer.agent.actor)
 
 
+def run_double(env_name='LunarLander-v2'):
+    tmp_env = gym.make(env_name)
+    env_args = get_env_kwargs(env_name)
+    obs_dim, ac_dim = tmp_env.observation_space.shape[0], tmp_env.action_space.n
+    tmp_env.close()
+    env_args['q_func'] = partial(env_args['q_func'], obs_dim, ac_dim)
+    args = DQNConfig(env_name, 0, double_q=True)
+    set_config_logdir(args)
+    params = vars(args)
+    params.update(env_args)
+    dqn_trainer = DQNTrainer(params)
+    dqn_trainer.run_training_loop(params['time_steps'], dqn_trainer.agent.actor, dqn_trainer.agent.actor)
+
+
 if __name__ == '__main__':
-    import sys
-    run_game(sys.argv[1])
+    try:
+        run_duel()
+    except Exception as e:
+        print(e)
+    try:
+        run_game()
+    except Exception as e:
+        print(e)
+    try:
+        run_double()
+    except Exception as e:
+        print(e)

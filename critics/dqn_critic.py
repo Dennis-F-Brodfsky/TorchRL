@@ -12,6 +12,7 @@ class DQNCritic(BaseCritic):
         self.double_q = hparams['double_q']
         self.grad_norm_clipping = hparams['max_norm_clipping']
         self.gamma = hparams['gamma']
+        self.use_entropy = hparams['use_entropy']
         self.target_update_rate = hparams['target_update_rate']
         self.q_net_spec = hparams['q_net_spec']
         self.q_net = hparams['q_func']()
@@ -29,8 +30,7 @@ class DQNCritic(BaseCritic):
             self.q2_net_target.to(ptu.device)
             self.q2_net_target.eval()
             self.parameters.append(self.q2_net.parameters())
-        self.q_net_optimizer = self.q_net_spec[0](self.parameters, **self.q_net_spec[1])
-        self.q_net_scheduler = optim.lr_scheduler.LambdaLR(self.q_net_optimizer, self.q_net_spec[2])
+        self.q_net_optimizer, self.q_net_scheduler = ptu.build_optim(self.q_net_spec, self.parameters)
 
     def update(self, ob_no, ac_na, next_ob_no, reward_n, terminal_n):
         self.q_net.train()
@@ -85,6 +85,16 @@ class DQNCritic(BaseCritic):
         else:
             qa_values = self.q_net(obs)
         return ptu.to_numpy(qa_values)
+
+    def estimate_values(self, obs, policy, **kwargs):
+        self.q_net.eval()
+        obs = ptu.from_numpy(obs)
+        if self.clipped_q:
+            self.q2_net.eval()
+            qa_values = torch.min(self.q_net(obs), self.q2_net(obs))
+        else:
+            qa_values = self.q_net(obs)
+        return qa_values
 
     @staticmethod
     def soft_update(net, target_net, target_update_rate):

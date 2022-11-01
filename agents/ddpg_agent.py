@@ -36,9 +36,9 @@ class DDPGAgent(BaseAgent):
                 old_log_prob = self.actor.get_log_prob(ob_batch, ac_batch)
             for _ in range(self.agent_params['num_actor_updates_per_agent_update']):  # when use ppo, more loops are suggested
                 loss['Actor_Loss'] = self.actor.update(ob_batch, ac_batch, adv_n, old_log_prob=old_log_prob)['Training Loss']
-                if self.t % self.target_update_freq == 0:
-                    self.critic.update_target_network()
-                    self.critic.soft_update(self.actor, self.target_actor, self.agent_params['target_update_rate'])
+            if self.t % self.target_update_freq == 0:
+                self.critic.update_target_network()
+                self.critic.soft_update(self.actor, self.target_actor, self.agent_params['target_update_rate'])
             all_logs.append(loss)
             self.t += 1
         return all_logs[-1]

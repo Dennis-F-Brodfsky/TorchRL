@@ -9,6 +9,7 @@ class ContinuousDQNCritic(DQNCritic):
         params['double_q'] = False # No double-q setting in DDPG as Q_net in DDPG directly output 1-d value
         super(ContinuousDQNCritic, self).__init__(params)
         self.target_actor = target_actor
+        self.use_entropy = params['use_entropy']
         self.target_actor.eval()
 
     def update(self, ob_no, ac_na, next_ob_no, reward_n, terminal_n):
@@ -22,10 +23,13 @@ class ContinuousDQNCritic(DQNCritic):
         terminals = ptu.from_numpy(terminal_n)
         q_t_values = self.q_net(obs, acs)
         q2_t_values = 0
-        q_tp1_values = self.q_net_target(next_obs, self.target_actor(next_obs).sample())
+        next_action, entropy = self.target_actor(next_obs, True)
+        q_tp1_values = self.q_net_target(next_obs, next_action)
         if self.clipped_q:
             q2_t_values = self.q2_net(obs, acs)
-            q_tp1_values = torch.min(q_tp1_values, self.q2_net_target(next_obs, self.target_actor(next_obs).sample()))
+            q_tp1_values = torch.min(q_tp1_values, self.q2_net_target(next_obs, next_action))
+        if self.use_entropy:
+            q_tp1_values -= torch.exp(self.target_actor.log_alpha())*entropy
         q_targets = rews + (1-terminals)*self.gamma*q_tp1_values.detach()
         self.q_net_optimizer.zero_grad()
         loss = self.loss(q_t_values, q_targets)

@@ -148,6 +148,7 @@ class DQNConfig(BasicConfig):
 
     def __post_init__(self):
         self.train_batch_size = self.batch_size
+        self.use_entropy = False
         if self.clipped_q:
             assert bool(self.q2_func)
 
@@ -166,12 +167,11 @@ class ACConfig(BasicConfig):
     critic_network: Module = None
     critic_optim_spec: OptimizerSpec = None
     standardize_advantages: bool = False
-    ppo_eps: float = 0.2 # when ppo_eps = 0, there is no difference from non-ppo algo
+    ppo_eps: float = 0  # when ppo_eps = 0, there is no difference from non-ppo algo
 
-
-@dataclasses.dataclass
-class SACConfig(BasicConfig):
-    pass
+    def __post_init__(self):
+        self.train_batch_size = self.batch_size
+        self.use_entropy = False
 
 
 @dataclasses.dataclass
@@ -188,8 +188,8 @@ class DDPGConfig(BasicConfig):
     actor_optim_spec: Union[OptimizerSpec, None] = None
     ppo_eps: float = 0
     clipped_q: bool = False
-    double_q: bool = False
-    exploration_schedule: Schedule = None
+    double_q: Optional[bool] = False
+    exploration_schedule: Optional[Schedule] = None
     q_func_spec: OptimizerSpec = None
     env_wrappers: Callable = None
     gamma: float = 0.99
@@ -197,9 +197,29 @@ class DDPGConfig(BasicConfig):
 
     def __post_init__(self):
         self.train_batch_size = self.batch_size
+        self.use_entropy = False
+        self.double_q = False
         assert self.ppo_eps >= 0
         if self.clipped_q:
             assert bool(self.q2_func)
+
+
+@dataclasses.dataclass
+class SACConfig(DDPGConfig):
+    use_entropy: bool = True
+    auto_adjust: Optional[bool] = None
+    init_alpha: Optional[float] = None
+    alpha_optim_spec: Optional[OptimizerSpec] = None
+
+    def __post_init__(self):
+        self.train_batch_size = self.batch_size
+        assert self.ppo_eps >= 0
+        if self.clipped_q:
+            assert bool(self.q2_func)
+        if self.use_entropy:
+            assert self.auto_adjust is not None and self.init_alpha is not None
+            if self.auto_adjust:
+                assert self.alpha_optim_spec is not None
 
 
 @dataclasses.dataclass

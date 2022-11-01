@@ -6,9 +6,9 @@ import infrastructure.pytorch_util as ptu
 import numpy as np
 
 
-class GuassianPolicy(BasePolicy, nn.Module):
+class GaussianPolicy(BasePolicy, nn.Module):
     def __init__(self, ac_dim, **kwargs):
-        super(GuassianPolicy, self).__init__(**kwargs)
+        super(GaussianPolicy, self).__init__(**kwargs)
         pass
 
     def get_action(self, obs):

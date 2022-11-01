@@ -19,6 +19,14 @@ class ArgmaxPolicy(BasePolicy):
             distribution = softmax(q_values)
             return sample_discrete(distribution)
 
+    def get_log_prob(self, obs):
+        if not self.use_boltzmann:
+            raise "Sorry, Not supported for deterministic actor"
+        else:
+            q_values = self.critic.qa_values(obs)
+            distribution = softmax(q_values)
+            return np.log(distribution + 1e-8)
+
     def save(self, filepath: str):
         pass
 

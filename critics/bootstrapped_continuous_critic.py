@@ -1,7 +1,6 @@
 import torch
 from infrastructure.base_class import BaseCritic
 from torch import nn
-from torch import optim
 from infrastructure import pytorch_util as ptu
 
 
@@ -15,12 +14,9 @@ class BootstrappedContinuousCritic(BaseCritic, nn.Module):
         self.num_grad_steps_per_target_update = hparams['num_grad_steps_per_target_update']
         self.gamma = hparams['gamma']
         self.critic_network = hparams['critic_network']
-        self.optim_spec = hparams['critic_optim_spec']
         self.critic_network.to(ptu.device)
         self.loss = nn.MSELoss()
-        self.optimizer = self.optim_spec[0](self.critic_network.parameters(), **self.optim_spec[1])
-        if self.optim_spec[2]:
-            self.lr_schedule = optim.lr_scheduler.LambdaLR(self.optimizer, self.optim_spec[2])
+        self.optimizer, self.lr_schedule = ptu.build_optim(hparams['critic_optim_spec'], self.critic_network.parameters())
 
     def forward(self, obs):
         return self.critic_network(obs).squeeze(1)
@@ -46,6 +42,6 @@ class BootstrappedContinuousCritic(BaseCritic, nn.Module):
             loss.backward()
             nn.utils.clip_grad_norm_(self.critic_network.parameters(), self.clip_grad_norm)
             self.optimizer.step()
-            if self.optim_spec[2]:
+            if self.lr_schedule:
                 self.lr_schedule.step()
         return loss.item()

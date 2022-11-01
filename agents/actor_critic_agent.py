@@ -7,6 +7,9 @@ import numpy as np
 
 
 class ACAgent(BaseAgent):
+    """
+    actually Advantage-Actor-Critic Method...
+    """
     def __init__(self, env, agent_params):
         super(ACAgent, self).__init__()
         self.env = env
@@ -55,10 +58,7 @@ class ACAgent(BaseAgent):
         self.replay_buffer.add_rollouts(paths)
 
     def sample(self, batch_size):
-        if self.replay_buffer.can_sample(batch_size):
-            return self.replay_buffer.sample_recent_data(batch_size)
-        else:
-            return [], [], [], [], []
+        return self.replay_buffer.sample_recent_data(min(self.replay_buffer.num_in_buffer-1, batch_size))
 
     def save(self, path):
         self.actor.save(path)
