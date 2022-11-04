@@ -246,7 +246,7 @@ class FlexibleReplayBuffer(object):
         end_idx = idx + 1
         start_idx = end_idx - self.horizon
         if self.horizon == 1:
-            return self.obs[end_idx - 1]
+            return self.obs[(end_idx - 1)%self.size]
         if start_idx < 0 and self.num_in_buffer != self.size:
             start_idx = 0
         for i in range(idx - 1, start_idx - 1, -1):

@@ -21,7 +21,7 @@ class PGAgent(BaseAgent):
             self.agent_params['mean_net'],
             self.agent_params['logits_na'],
             self.agent_params['max_norm_clipping'],
-            self.agent_params['optimizer_spec'],
+            self.agent_params['actor_optim_spec'],
             self.agent_params['baseline_optim_spec'],
             self.agent_params['baseline_network'],
             discrete=self.agent_params['discrete'],
@@ -73,7 +73,7 @@ class PGAgent(BaseAgent):
         self.replay_buffer.add_rollouts(paths)
 
     def sample(self, batch_size):
-        return self.replay_buffer.sample_recent_data(batch_size, concat_rew=False)
+        return self.replay_buffer.sample_recent_data(min(self.replay_buffer.num_in_buffer-1, batch_size), concat_rew=False)
 
     def save(self, path):
         self.actor.save(path)

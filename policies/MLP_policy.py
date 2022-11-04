@@ -132,16 +132,37 @@ class MLPPolicyAC(MLPPolicyPG):
             loss = - torch.min(ratio*adv_n, torch.clamp(ratio, 1-self.ppo_eps, 1+self.ppo_eps)*adv_n).mean()
         else:
             loss = - (log_prob*adv_n).mean()
+        self.optimizer.zero_grad()
+        loss.backward()
         if self.discrete:
             nn.utils.clip_grad_norm_(self.logits_na.parameters(), self.clip_grad_norm)
         else:
             nn.utils.clip_grad_norm_(self.mean_net.parameters(), self.clip_grad_norm)
             nn.utils.clip_grad_norm_(self.logstd, self.clip_grad_norm/10)
-        self.optimizer.zero_grad()
-        loss.backward()
         self.optimizer.step()
         if self.optimizer_spec[2]:
             self.lr_schedule.step()
+        return {'Training Loss': loss.item()}
+
+
+class MLPPolicyDDPG(MLPPolicyAC):
+    def update(self, obs, action, q_vals, log_pi, old_log_prob: torch.Tensor = None):
+        self.train()
+        observation = ptu.from_numpy(obs)
+        action = ptu.from_numpy(action)
+        log_prob = self(observation).log_prob(action)
+        loss = - q_vals.mean()
+        self.optimizer.zero_grad()
+        loss.backward()
+        if self.discrete:
+            nn.utils.clip_grad_norm_(self.logits_na.parameters(), self.clip_grad_norm)
+        else:
+            nn.utils.clip_grad_norm_(self.mean_net.parameters(), self.clip_grad_norm)
+            nn.utils.clip_grad_norm_(self.logstd, self.clip_grad_norm/10)
+        self.optimizer.step()
+        if self.optimizer_spec[2]:
+            self.lr_schedule.step()
+        return {'Actor Loss': loss.item()}
 
 
 class MLPPolicySAC(MLPPolicyAC):
@@ -156,21 +177,22 @@ class MLPPolicySAC(MLPPolicyAC):
             self.log_alpha = log_alpha
             self.alpha_optim_spec = alpha_optim_spec
             self.alpha_optim, self.alpha_schedule = ptu.build_optim(self.alpha_optim_spec, self.log_alpha.parameters())
+            self.log_alpha.to(ptu.device)
 
-    def update(self, obs, action, adv_n=None, q_vals=None, old_log_prob: torch.Tensor = None):
+    def update(self, obs, action, q_vals, log_pi, old_log_prob: torch.Tensor = None):
         self.train()
         obs, action = ptu.from_numpy(obs), ptu.from_numpy(action)
-        new_action, log_prob = self(obs, True)
-        alpha_loss = -torch.exp(self.log_alpha())*(log_prob+self.target_entropy).detach().mean()
+        log_prob = self(obs).log_prob(action)
+        alpha_loss = -self.log_alpha()*(log_pi+self.target_entropy).detach().mean()
         alpha = torch.exp(self.log_alpha()).detach()
-        actor_loss = (alpha*log_prob-adv_n)
+        actor_loss = (torch.exp(log_prob).detach()*(alpha*log_pi-q_vals)).mean()
         self.optimizer.zero_grad()
         actor_loss.backward()
         if self.discrete:
             nn.utils.clip_grad_norm_(self.logits_na.parameters(), self.clip_grad_norm)
         else:
             nn.utils.clip_grad_norm_(self.mean_net.parameters(), self.clip_grad_norm)
-            nn.utils.clip_grad_norm_(self.logstd, self.clip_grad_norm/10)
+            nn.utils.clip_grad_norm_(self.logstd, self.clip_grad_norm/5)
         self.optimizer.step()
         if self.optimizer_spec[2]:
             self.lr_schedule.step()
@@ -179,6 +201,7 @@ class MLPPolicySAC(MLPPolicyAC):
         self.alpha_optim.step()
         if self.alpha_optim_spec[2]:
             self.alpha_schedule.step()
+        return {'Actor Loss': actor_loss.item(), 'Alpha Loss': alpha_loss.item()}
 
 
 class MLPPolicySL(MLPPolicy):
@@ -192,7 +215,7 @@ class MLPPolicySL(MLPPolicy):
         if self.discrete:
             nn.utils.clip_grad_norm_(self.parameters(), max_norm=self.clip_grad_norm)
         else:
-            nn.utils.clip_grad_norm_(self.logstd, max_norm=self.clip_grad_norm/10)
+            nn.utils.clip_grad_norm_(self.logstd, max_norm=self.clip_grad_norm/5)
             nn.utils.clip_grad_norm_(self.mean_net.parameters(), max_norm=self.clip_grad_norm)
         self.optimizer.step()
         if self.optimizer_spec[2]:

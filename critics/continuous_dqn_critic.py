@@ -36,27 +36,29 @@ class ContinuousDQNCritic(DQNCritic):
         if self.clipped_q:
             loss += self.loss(q2_t_values, q_targets)
         loss.backward()
-        utils.clip_grad_norm_(self.parameters(), self.grad_norm_clipping)
+        utils.clip_grad_norm_(self.parameters, self.grad_norm_clipping)
         self.q_net_optimizer.step()
         if self.q_net_spec[2]:
             self.q_net_scheduler.step()
+        return {'Critic Loss': loss.item(), 'Q_Target': q_targets.mean().item()}
 
     def qa_values(self, obs, **kwargs):
         self.q_net.eval()
         obs = ptu.from_numpy(obs)
         if self.clipped_q:
             self.q2_net.eval()
-            qa_values = torch.min(self.q_net(obs, self.target_actor(obs).sample()),
-                                  self.q2_net(obs, self.target_actor(obs).sample()))
+            qa_values = torch.min(self.q_net(obs, self.target_actor(obs)),
+                                  self.q2_net(obs, self.target_actor(obs)))
         else:
-            qa_values = self.q_net(obs, self.target_actor(obs).sample())
+            qa_values = self.q_net(obs, self.target_actor(obs))
         return ptu.to_numpy(qa_values)
 
     def estimate_values(self, obs, policy, **kwargs):
         obs = ptu.from_numpy(obs)
+        new_action, log_pi = policy(obs, return_log_prob=True)
         if self.clipped_q:
-            values = torch.min(self.q_net(obs, policy(obs).rsample()),
-                               self.q2_net(obs, policy(obs).rsample()))
+            q_vals = torch.min(self.q_net(obs, new_action),
+                               self.q2_net(obs, new_action))
         else:
-            values = self.q_net(obs, policy(obs).rsample())
-        return values
+            q_vals = self.q_net(obs, new_action)
+        return q_vals, log_pi

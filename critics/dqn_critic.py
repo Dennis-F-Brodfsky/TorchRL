@@ -1,6 +1,6 @@
 from infrastructure.base_class import BaseCritic
 import torch
-import torch.optim as optim
+from itertools import chain
 from torch.nn import utils
 from torch import nn
 from infrastructure import pytorch_util as ptu
@@ -12,9 +12,9 @@ class DQNCritic(BaseCritic):
         self.double_q = hparams['double_q']
         self.grad_norm_clipping = hparams['max_norm_clipping']
         self.gamma = hparams['gamma']
-        self.use_entropy = hparams['use_entropy']
+        # self.use_entropy = hparams['use_entropy']
         self.target_update_rate = hparams['target_update_rate']
-        self.q_net_spec = hparams['q_net_spec']
+        self.q_net_spec = hparams['q_func_spec']
         self.q_net = hparams['q_func']()
         self.q_net_target = hparams['q_func']()
         self.clipped_q = hparams['clipped_q']
@@ -22,14 +22,14 @@ class DQNCritic(BaseCritic):
         self.q_net.to(ptu.device)
         self.q_net_target.to(ptu.device)
         self.q_net_target.eval()
-        self.parameters = [self.q_net.parameters()]
+        self.parameters = self.q_net.parameters()
         if self.clipped_q:
             self.q2_net = hparams['q2_func']()
             self.q2_net_target = hparams['q2_func']()
             self.q2_net.to(ptu.device)
             self.q2_net_target.to(ptu.device)
             self.q2_net_target.eval()
-            self.parameters.append(self.q2_net.parameters())
+            self.parameters = chain(self.q2_net.parameters(), self.parameters)
         self.q_net_optimizer, self.q_net_scheduler = ptu.build_optim(self.q_net_spec, self.parameters)
 
     def update(self, ob_no, ac_na, next_ob_no, reward_n, terminal_n):
@@ -69,7 +69,7 @@ class DQNCritic(BaseCritic):
         self.q_net_optimizer.step()
         if self.q_net_spec[2]:
             self.q_net_scheduler.step()
-        return {'Training Loss': ptu.to_numpy(loss)}
+        return {'Delta Error': ptu.to_numpy(loss), 'Estimated Q': q_t_values.mean().item()}
 
     def update_target_network(self):
         self.soft_update(self.q_net, self.q_net_target, self.target_update_rate)
@@ -99,4 +99,4 @@ class DQNCritic(BaseCritic):
     @staticmethod
     def soft_update(net, target_net, target_update_rate):
         for target_param, param in zip(target_net.parameters(), net.parameters()):
-            target_param.data.copy_(param.data * (1 - target_update_rate) + target_param.data * target_update_rate)
+            target_param.data.copy_(param.data * target_update_rate + target_param.data * (1-target_update_rate))

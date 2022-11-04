@@ -1,6 +1,6 @@
 import dataclasses
 from infrastructure.base_class import Schedule
-from typing import Optional, Union, Callable
+from typing import Optional, Sequence, Union, Callable
 from torch.nn import Module
 from infrastructure.utils import OptimizerSpec
 
@@ -24,6 +24,7 @@ class BasicConfig:
     logdir: str = None
     batch_size_initial: int = batch_size
     add_ob_noise: bool = False
+    env_wrappers: Optional[Callable] = None
 
 
 @dataclasses.dataclass
@@ -179,16 +180,16 @@ class DDPGConfig(BasicConfig):
     max_norm_clipping: float = 10
     target_update_freq: int = int(1e4)
     target_update_rate: float = 1.0
-    q_func: Union[Callable, None] = None
+    q_func: Callable = None
     q2_func: Optional[Callable] = None
     num_actor_updates_per_agent_update: int = 1
     num_critic_updates_per_agent_update: int = 1
-    mean_net: Union[Module, None] = None
-    logits_na: Union[Module, None] = None
-    actor_optim_spec: Union[OptimizerSpec, None] = None
-    ppo_eps: float = 0
+    optim_spec: Union[OptimizerSpec, None] = None
+    action_lower_bound: Union[Sequence, None] = None
+    action_upper_bound: Union[Sequence, None] = None
+    dist_param_model: Callable = None
+    deterministic: bool = True   # actually can be set to True....
     clipped_q: bool = False
-    double_q: Optional[bool] = False
     exploration_schedule: Optional[Schedule] = None
     q_func_spec: OptimizerSpec = None
     env_wrappers: Callable = None
@@ -199,7 +200,6 @@ class DDPGConfig(BasicConfig):
         self.train_batch_size = self.batch_size
         self.use_entropy = False
         self.double_q = False
-        assert self.ppo_eps >= 0
         if self.clipped_q:
             assert bool(self.q2_func)
 
@@ -210,10 +210,10 @@ class SACConfig(DDPGConfig):
     auto_adjust: Optional[bool] = None
     init_alpha: Optional[float] = None
     alpha_optim_spec: Optional[OptimizerSpec] = None
+    target_entropy: Optional[float] = -1.0
 
     def __post_init__(self):
         self.train_batch_size = self.batch_size
-        assert self.ppo_eps >= 0
         if self.clipped_q:
             assert bool(self.q2_func)
         if self.use_entropy:

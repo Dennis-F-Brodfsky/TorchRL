@@ -37,7 +37,9 @@ class RLTrainer:
         torch.manual_seed(seed)
         ptu.init_gpu(not self.params['no_gpu'], self.params['which_gpu'])
         # create env and setup some env information
-        self.eval_env = self.env = self._create_env(params)
+        self.env = self._create_env(params)
+        self.eval_env = self._create_eval_env(params)
+        params['action_space'] = self.env.action_space
         if isinstance(self.env, BanditWrapper):
             self.params['ac_dim'] = self.env.ac_dim
             self.params['obs_dim'] = self.env.obs_dim
@@ -85,6 +87,9 @@ class RLTrainer:
             env = BanditWrapper(gym.make(self.params['env_name']), **params['env_config'])
         env.seed(params['seed'])
         return env
+
+    def _create_eval_env(self, params) -> gym.Env:
+        return self._create_env(params)  # if env_wrappers != None, rewrite thie method.
 
     @staticmethod
     def _get_object_dim(obj):
@@ -326,8 +331,8 @@ class DDPGTrainer(RLTrainer):
 
     def _create_env(self, params) -> gym.Env:
         env = gym.make(params['env_name'])
-        if params['gym_wrapper']:
-            env = params['gym_wrapper'](env)
+        if params['env_wrappers']:
+            env = params['env_wrappers'](env)
         env.seed(params['seed'])
         return env
 
@@ -339,8 +344,8 @@ class SACTrainer(RLTrainer):
 
     def _create_env(self, params) -> gym.Env:
         env = gym.make(params['env_name'])
-        if params['gym_wrapper']:
-            env = params['gym_wrapper'](env)
+        if params['env_wrappers']:
+            env = params['env_wrappers'](env)
         env.seed(params['seed'])
         return env
 

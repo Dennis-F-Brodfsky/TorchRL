@@ -31,7 +31,7 @@ def get_env_kwargs(env_name):
             return env
 
         kwargs = {
-            'q_net_spec': lander_optimizer(),
+            'q_func_spec': lander_optimizer(500000),
             'q_func': create_lander_q_network,
             'buffer_size': 50000,
             'batch_size': 32,
@@ -123,13 +123,13 @@ def atari_optimizer(num_timesteps):
     )
 
 
-def lander_optimizer():
+def lander_optimizer(num_timesteps):
     return OptimizerSpec(
         constructor=optim.Adam,
         optim_kwargs=dict(
             lr=1,
         ),
-        learning_rate_schedule=lambda epoch: 1e-4,  # keep init learning rate
+        learning_rate_schedule=lambda epoch: 1e-3 if epoch <= num_timesteps*3//4 else 5e-4,  # keep init learning rate
     )
 
 
@@ -142,13 +142,13 @@ def lander_exploration_schedule(num_timesteps):
     )
 
 
-def run_game(env_name='LunarLander-v2'):
+def run_game(env_name='LunarLander-v2', seed=0):
     tmp_env = gym.make(env_name)
     env_args = get_env_kwargs(env_name)
     obs_dim, ac_dim = tmp_env.observation_space.shape[0], tmp_env.action_space.n
     tmp_env.close()
     env_args['q_func'] = partial(env_args['q_func'], obs_dim, ac_dim)
-    args = DQNConfig(env_name, 0)
+    args = DQNConfig(env_name, 0, exp_name='q', seed=seed)
     set_config_logdir(args)
     params = vars(args)
     params.update(env_args)
@@ -160,7 +160,7 @@ class Duel_Vnet(nn.Module):
     def __init__(self, ob_dim, ac_dim):
         super(Duel_Vnet, self).__init__()
         self.feature = nn.Sequential(nn.Linear(ob_dim, 64), nn.ReLU(), nn.Linear(64, 64), nn.ReLU())
-        self.v_layer = nn.Sequential(nn.Linear(64, 16), nn.ReLU(), nn.Linear(16, 1))
+        self.v_layer = nn.Sequential(nn.Linear(64, 64), nn.ReLU(), nn.Linear(64, 1))
         self.q_layer = nn.Linear(64, ac_dim)
 
     def forward(self, x):
@@ -170,14 +170,14 @@ class Duel_Vnet(nn.Module):
         return v + q - q.mean(dim=-1, keepdim=True)
 
 
-def run_duel(env_name='LunarLander-v2'):
+def run_duel(env_name='LunarLander-v2', seed=0):
     tmp_env = gym.make(env_name)
     ob_dim = tmp_env.observation_space.shape[0]
     ac_dim = tmp_env.action_space.n
     create_q_net = lambda: Duel_Vnet(ob_dim, ac_dim)
     env_args = get_env_kwargs(env_name)
     env_args['q_func'] = create_q_net
-    args = DQNConfig(env_name, 1, double_q=False)
+    args = DQNConfig(env_name, 1, double_q=False, exp_name='duel-q', seed=seed)
     set_config_logdir(args)
     params = vars(args)
     params.update(env_args)
@@ -185,13 +185,13 @@ def run_duel(env_name='LunarLander-v2'):
     trainer.run_training_loop(params['time_steps'], trainer.agent.actor, trainer.agent.actor)
 
 
-def run_double(env_name='LunarLander-v2'):
+def run_double(env_name='LunarLander-v2', seed=0):
     tmp_env = gym.make(env_name)
     env_args = get_env_kwargs(env_name)
     obs_dim, ac_dim = tmp_env.observation_space.shape[0], tmp_env.action_space.n
     tmp_env.close()
     env_args['q_func'] = partial(env_args['q_func'], obs_dim, ac_dim)
-    args = DQNConfig(env_name, 0, double_q=True)
+    args = DQNConfig(env_name, 0, double_q=True, exp_name='double-q', seed=seed)
     set_config_logdir(args)
     params = vars(args)
     params.update(env_args)
@@ -200,15 +200,7 @@ def run_double(env_name='LunarLander-v2'):
 
 
 if __name__ == '__main__':
-    try:
-        run_duel()
-    except Exception as e:
-        print(e)
-    try:
-        run_game()
-    except Exception as e:
-        print(e)
-    try:
-        run_double()
-    except Exception as e:
-        print(e)
+    for i in range(3):
+        run_game(seed=i)
+        run_duel(seed=i)
+        run_double(seed=i)
