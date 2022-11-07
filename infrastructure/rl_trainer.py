@@ -14,6 +14,7 @@ from infrastructure import pytorch_util as ptu
 from infrastructure import utils
 from infrastructure.logger import Logger
 import os
+import random
 
 
 _str_to_env = {name + '-v0': getattr(envs, name) for name in envs.__all__}
@@ -33,6 +34,7 @@ class RLTrainer:
 
         # random seed and init gpu
         seed = self.params['seed']
+        random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
         ptu.init_gpu(not self.params['no_gpu'], self.params['which_gpu'])
